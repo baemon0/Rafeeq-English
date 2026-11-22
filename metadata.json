@@ -1,0 +1,6 @@
+{
+  "name": "Rafeeq English (رفيق الإنجليزية)",
+  "description": "Smart AI English learning companion with Saudi/Colloquial slang translation, Smart Lens object scanner, AI character chat, and interactive Kids & Adults modes.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
