@@ -56,9 +56,10 @@ async function callGeminiSafe(
         setTimeout(() => reject(new Error(`Timeout on model ${modelName} (15s)`)), 15000);
       });
 
-      const config: any = {
-        thinkingConfig: { thinkingBudget: 0 }
-      };
+      const config: any = {};
+      if (modelName === 'gemini-3.8-flash' || modelName === 'gemini-3.6-flash') {
+        config.thinkingConfig = { thinkingBudget: 0 };
+      }
       if (responseJson) {
         config.responseMimeType = 'application/json';
       }
