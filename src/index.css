@@ -1,1 +1,215 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'IBM Plex Sans Arabic', sans-serif;
+  --font-mono: 'IBM Plex Sans Arabic', monospace;
+}
+
+*,
+*::before,
+*::after,
+html,
+body,
+input,
+button,
+textarea,
+select {
+  font-family: 'IBM Plex Sans Arabic', sans-serif !important;
+}
+
+@layer base {
+  html,
+  body {
+    line-height: 1.65;
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    line-height: 1.35;
+    text-wrap: balance;
+  }
+
+  p,
+  textarea,
+  input {
+    line-height: 1.625;
+  }
+}
+
+@layer utilities {
+  /* Warm boutique editorial surface for interior cards */
+  .glass-card,
+  .editorial-card {
+    background: rgba(255, 253, 250, 0.96);
+    border: 1px solid rgba(27, 67, 50, 0.09);
+    box-shadow:
+      0 12px 32px -12px rgba(27, 67, 50, 0.07),
+      0 2px 8px -2px rgba(27, 67, 50, 0.04);
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .dark .glass-card,
+  .dark .editorial-card {
+    background: rgba(24, 32, 28, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow:
+      0 14px 36px -12px rgba(0, 0, 0, 0.45),
+      0 4px 12px -4px rgba(0, 0, 0, 0.28);
+  }
+
+  /* Frosted centered auth card floating over the ambient animated canvas */
+  .glass-auth-card {
+    background: rgba(250, 248, 245, 0.78);
+    backdrop-filter: blur(24px) saturate(135%);
+    -webkit-backdrop-filter: blur(24px) saturate(135%);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    box-shadow:
+      0 32px 72px -18px rgba(27, 67, 50, 0.22),
+      0 8px 24px -6px rgba(27, 67, 50, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+
+  .dark .glass-auth-card {
+    background: rgba(18, 25, 22, 0.80);
+    backdrop-filter: blur(24px) saturate(135%);
+    -webkit-backdrop-filter: blur(24px) saturate(135%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+      0 32px 72px -18px rgba(0, 0, 0, 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-header {
+    backdrop-filter: blur(18px) saturate(130%);
+    -webkit-backdrop-filter: blur(18px) saturate(130%);
+  }
+
+  .hover-scale {
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .hover-scale:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 18px 36px -12px rgba(27, 67, 50, 0.11),
+      0 6px 14px -4px rgba(27, 67, 50, 0.06);
+  }
+
+  .hover-scale:active {
+    transform: translateY(0) scale(0.99);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* GPU-Accelerated Ambient Gradient Mesh & Floating Orbs (Welcome / Login) */
+  .ambient-canvas {
+    background:
+      radial-gradient(circle at 18% 22%, rgba(212, 163, 115, 0.28) 0%, transparent 48%),
+      radial-gradient(circle at 82% 18%, rgba(132, 169, 140, 0.38) 0%, transparent 52%),
+      radial-gradient(circle at 75% 82%, rgba(27, 67, 50, 0.26) 0%, transparent 55%),
+      radial-gradient(circle at 18% 80%, rgba(233, 196, 106, 0.24) 0%, transparent 50%),
+      linear-gradient(135deg, #FAF8F5 0%, #EFECE3 48%, #E5ECE5 100%);
+  }
+
+  .dark .ambient-canvas {
+    background:
+      radial-gradient(circle at 18% 22%, rgba(212, 163, 115, 0.16) 0%, transparent 48%),
+      radial-gradient(circle at 82% 18%, rgba(45, 106, 79, 0.32) 0%, transparent 52%),
+      radial-gradient(circle at 75% 82%, rgba(27, 67, 50, 0.45) 0%, transparent 55%),
+      linear-gradient(135deg, #0D1411 0%, #121D18 50%, #17231C 100%);
+  }
+
+  @keyframes orb-drift-slow {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(4%, -5%, 0) scale(1.06);
+    }
+    66% {
+      transform: translate3d(-3%, 4%, 0) scale(0.96);
+    }
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes orb-drift-reverse {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    35% {
+      transform: translate3d(-5%, 3%, 0) scale(1.08);
+    }
+    70% {
+      transform: translate3d(4%, -4%, 0) scale(0.95);
+    }
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes ambient-breathe {
+    0%, 100% {
+      transform: translate3d(0, 0, 0) scale(1);
+      opacity: 0.55;
+    }
+    50% {
+      transform: translate3d(0, -2%, 0) scale(1.05);
+      opacity: 0.78;
+    }
+  }
+
+  .ambient-orb-emerald {
+    will-change: transform;
+    animation: orb-drift-slow 18s ease-in-out infinite;
+  }
+
+  .ambient-orb-sage {
+    will-change: transform;
+    animation: orb-drift-reverse 22s ease-in-out infinite;
+  }
+
+  .ambient-orb-gold {
+    will-change: transform, opacity;
+    animation: ambient-breathe 14s ease-in-out infinite;
+  }
+
+  @keyframes confetti-float {
+    0%, 100% {
+      transform: translateY(0) scale(0.96);
+      opacity: 0.95;
+    }
+    50% {
+      transform: translateY(-4px) scale(1.04);
+      opacity: 1;
+    }
+  }
+
+  .animate-confetti-sparkle {
+    animation: confetti-float 2s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ambient-orb-emerald,
+    .ambient-orb-sage,
+    .ambient-orb-gold,
+    .animate-confetti-sparkle {
+      animation: none !important;
+    }
+  }
+}

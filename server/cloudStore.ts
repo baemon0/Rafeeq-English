@@ -12,11 +12,13 @@ import type {
   StoryKind,
   UserProgress
 } from '../src/types';
+import { findShopItem } from '../src/data/shopCatalog';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 const USERS_FILE = path.resolve(DATA_DIR, 'users.json');
 const STORIES_FILE = path.resolve(DATA_DIR, 'stories.json');
+const SESSIONS_FILE = path.resolve(DATA_DIR, 'sessions.json');
 
 export interface StoredUserRecord {
   id: string;
@@ -44,16 +46,18 @@ function createEmptyProgress(): UserProgress {
   return {
     stars: 0,
     xp: 0,
-    chatXp: 0,
-    langCoins: 0,
     streak: 0,
     lastActiveDate: null,
     translationsCount: 0,
     challengeQuestionsCount: 0,
     lensScansCount: 0,
     chatMessagesCount: 0,
-    scannedObjects: [],
-    unlockedBadges: {}
+    unlockedBadges: {},
+    vocabulary: [],
+    unlockedCharacters: {},
+    purchasedItems: {},
+    streakShieldActive: false,
+    secondChanceHearts: 0
   };
 }
 
@@ -73,30 +77,47 @@ export function createEmptyModeProfile(): ModeCloudProfile {
 function normalizeLoadedProfile(raw: any): ModeCloudProfile {
   const empty = createEmptyModeProfile();
   if (!raw || typeof raw !== 'object') return empty;
-  const scannedObjects = Array.isArray(raw.progress?.scannedObjects)
-    ? Array.from(
-        new Set(
-          raw.progress.scannedObjects.filter((s: any): s is string => typeof s === 'string' && s.trim() !== '')
-        )
-      )
-    : [];
-  const chatCount = Math.max(0, Number(raw.progress?.chatMessagesCount) || 0);
 
   return {
     progress: {
-      ...empty.progress,
-      ...(raw.progress && typeof raw.progress === 'object' ? raw.progress : {}),
-      chatXp:
-        typeof raw.progress?.chatXp === 'number'
-          ? Math.max(0, raw.progress.chatXp)
-          : chatCount * 10,
-      langCoins: Math.max(0, Number(raw.progress?.langCoins) || 0),
-      scannedObjects,
+      stars: Math.max(0, Number(raw.progress?.stars) || 0),
+      xp: Math.max(0, Number(raw.progress?.xp) || 0),
+      streak: Math.max(0, Number(raw.progress?.streak) || 0),
+      lastActiveDate:
+        typeof raw.progress?.lastActiveDate === 'string'
+          ? raw.progress.lastActiveDate
+          : null,
+      translationsCount: Math.max(0, Number(raw.progress?.translationsCount) || 0),
+      challengeQuestionsCount: Math.max(0, Number(raw.progress?.challengeQuestionsCount) || 0),
+      lensScansCount: Math.max(0, Number(raw.progress?.lensScansCount) || 0),
+      chatMessagesCount: Math.max(0, Number(raw.progress?.chatMessagesCount) || 0),
       unlockedBadges: {
         ...(raw.progress?.unlockedBadges && typeof raw.progress.unlockedBadges === 'object'
           ? raw.progress.unlockedBadges
           : {})
-      }
+      },
+      vocabulary: Array.isArray(raw.progress?.vocabulary)
+        ? raw.progress.vocabulary.map((v: any) => ({
+            id: String(v.id || Date.now() + Math.random()),
+            word: String(v.word || ''),
+            meaning: String(v.meaning || ''),
+            masteryLevel: Math.max(0, Math.min(3, Number(v.masteryLevel) || 0)),
+            nextReviewDate: Number(v.nextReviewDate) || Date.now(),
+            lastReviewed: Number(v.lastReviewed) || Date.now()
+          }))
+        : [],
+      unlockedCharacters: {
+        ...(raw.progress?.unlockedCharacters && typeof raw.progress.unlockedCharacters === 'object'
+          ? raw.progress.unlockedCharacters
+          : {})
+      },
+      purchasedItems: {
+        ...(raw.progress?.purchasedItems && typeof raw.progress.purchasedItems === 'object'
+          ? raw.progress.purchasedItems
+          : {})
+      },
+      streakShieldActive: Boolean(raw.progress?.streakShieldActive),
+      secondChanceHearts: Math.max(0, Number(raw.progress?.secondChanceHearts) || 0)
     },
     weeklyTracker: {
       firstUsedDate:
@@ -153,7 +174,7 @@ function loadUsersFromDisk(): void {
   }
 }
 
-function persistUsersToDisk(): void {
+export function persistUsersToDisk(): void {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -167,7 +188,45 @@ function persistUsersToDisk(): void {
   }
 }
 
+function loadSessionsFromDisk(): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(SESSIONS_FILE)) return;
+    const raw = fs.readFileSync(SESSIONS_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    for (const [token, entry] of Object.entries(parsed)) {
+      const e = entry as SessionEntry;
+      if (typeof token === 'string' && e && typeof e.userId === 'string' && usersById.has(e.userId)) {
+        sessions.set(token, { userId: e.userId, createdAt: Number(e.createdAt) || Date.now() });
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load sessions.json, starting fresh sessions:', err);
+  }
+}
+
+function persistSessionsToDisk(): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const serialized: Record<string, SessionEntry> = {};
+    for (const [token, entry] of sessions.entries()) {
+      serialized[token] = entry;
+    }
+    const tmpFile = `${SESSIONS_FILE}.tmp`;
+    fs.writeFileSync(tmpFile, JSON.stringify(serialized, null, 2), 'utf-8');
+    fs.renameSync(tmpFile, SESSIONS_FILE);
+  } catch (err) {
+    console.error('Failed to persist sessions.json:', err);
+  }
+}
+
 loadUsersFromDisk();
+loadSessionsFromDisk();
 
 const WEAK_PASSWORDS = new Set([
   '1234',
@@ -345,6 +404,7 @@ export function authenticateUser(
 export function createSession(userId: string): string {
   const token = crypto.randomBytes(32).toString('hex');
   sessions.set(token, { userId, createdAt: Date.now() });
+  persistSessionsToDisk();
   return token;
 }
 
@@ -358,6 +418,7 @@ export function getUserByToken(token: string | undefined): StoredUserRecord | nu
 export function revokeSession(token: string | undefined): void {
   if (token) {
     sessions.delete(token);
+    persistSessionsToDisk();
   }
 }
 
@@ -370,24 +431,9 @@ export function updateUserModeProfile(
   let nextProgress = existing.progress;
 
   if (patch.progress) {
-    const incomingScanned = Array.isArray(patch.progress.scannedObjects)
-      ? Array.from(
-          new Set(
-            [
-              ...(existing.progress.scannedObjects || []),
-              ...patch.progress.scannedObjects.filter(
-                (s): s is string => typeof s === 'string' && s.trim() !== ''
-              )
-            ]
-          )
-        ).slice(-200)
-      : existing.progress.scannedObjects || [];
-
     nextProgress = {
       stars: Math.max(0, Number(patch.progress.stars) || 0),
       xp: Math.max(0, Number(patch.progress.xp) || 0),
-      chatXp: Math.max(0, Number(patch.progress.chatXp) || 0),
-      langCoins: Math.max(0, Number(patch.progress.langCoins) || 0),
       streak: Math.max(0, Number(patch.progress.streak) || 0),
       lastActiveDate:
         typeof patch.progress.lastActiveDate === 'string'
@@ -397,11 +443,52 @@ export function updateUserModeProfile(
       challengeQuestionsCount: Math.max(0, Number(patch.progress.challengeQuestionsCount) || 0),
       lensScansCount: Math.max(0, Number(patch.progress.lensScansCount) || 0),
       chatMessagesCount: Math.max(0, Number(patch.progress.chatMessagesCount) || 0),
-      scannedObjects: incomingScanned,
       unlockedBadges:
         patch.progress.unlockedBadges && typeof patch.progress.unlockedBadges === 'object'
           ? { ...patch.progress.unlockedBadges }
-          : {}
+          : {},
+      vocabulary: (() => {
+        const mergedMap = new Map<string, any>();
+        for (const v of existing.progress.vocabulary || []) {
+          if (v?.word) mergedMap.set(String(v.word).toLowerCase(), v);
+        }
+        if (Array.isArray(patch.progress.vocabulary)) {
+          for (const rawV of patch.progress.vocabulary) {
+            const word = String(rawV?.word || '');
+            if (!word) continue;
+            const key = word.toLowerCase();
+            const prevV = mergedMap.get(key);
+            const nextLevel = Math.max(0, Math.min(3, Number(rawV.masteryLevel) || 0));
+            if (!prevV || nextLevel >= (prevV.masteryLevel || 0)) {
+              mergedMap.set(key, {
+                id: String(rawV.id || prevV?.id || Date.now()),
+                word,
+                meaning: String(rawV.meaning || prevV?.meaning || ''),
+                masteryLevel: Math.max(nextLevel, prevV?.masteryLevel || 0),
+                nextReviewDate: Number(rawV.nextReviewDate) || prevV?.nextReviewDate || Date.now(),
+                lastReviewed: Number(rawV.lastReviewed) || prevV?.lastReviewed || Date.now()
+              });
+            }
+          }
+        }
+        return Array.from(mergedMap.values());
+      })(),
+      unlockedCharacters:
+        patch.progress.unlockedCharacters && typeof patch.progress.unlockedCharacters === 'object'
+          ? { ...patch.progress.unlockedCharacters }
+          : existing.progress.unlockedCharacters,
+      purchasedItems:
+        patch.progress.purchasedItems && typeof patch.progress.purchasedItems === 'object'
+          ? { ...patch.progress.purchasedItems }
+          : existing.progress.purchasedItems,
+      streakShieldActive:
+        typeof patch.progress.streakShieldActive === 'boolean'
+          ? patch.progress.streakShieldActive
+          : existing.progress.streakShieldActive,
+      secondChanceHearts:
+        typeof patch.progress.secondChanceHearts === 'number'
+          ? Math.max(0, patch.progress.secondChanceHearts)
+          : existing.progress.secondChanceHearts
     };
   }
 
@@ -525,17 +612,77 @@ export function buildLeaderboard(mode: AppMode, currentUserId?: string): Leaderb
     const prof = u.profiles[mode];
     return {
       rank: idx + 1,
-      userId: u.id,
       username: u.username,
       stars: prof.progress.stars,
       xp: prof.progress.xp,
-      langCoins: Math.max(0, Number(prof.progress.langCoins) || 0),
       streak: prof.progress.streak,
       level: getServerSkillLevel(prof.progress.xp),
       role: getServerDiscordRole(prof.progress.xp, mode),
-      isCurrentUser: Boolean(currentUserId && u.id === currentUserId)
+      isCurrentUser: Boolean(currentUserId && u.id === currentUserId),
+      galaxyChampion: mode === 'kid' ? Boolean(prof.progress.purchasedItems?.galaxy_champion) : false,
+      goldenVipFrame: mode === 'adult' ? Boolean(prof.progress.purchasedItems?.golden_vip_frame) : false
     };
   });
+}
+
+export function purchaseShopItem(
+  user: StoredUserRecord,
+  mode: AppMode,
+  itemId: string
+): { ok: true; user: CloudUser } | { ok: false; status: number; error: string } {
+  const item = findShopItem(itemId, mode);
+  if (!item) {
+    return { ok: false, status: 400, error: 'العنصر المطلوب غير متوفر في هذا المتجر.' };
+  }
+
+  const profile = user.profiles[mode];
+  const progress = profile.progress;
+
+  if (item.id === 'streak_shield' && progress.streakShieldActive) {
+    return { ok: false, status: 400, error: 'درع حماية السلسلة مُفعّل لديك بالفعل!' };
+  }
+  if (item.id === 'second_chance_heart' && progress.secondChanceHearts > 0) {
+    return { ok: false, status: 400, error: 'لديك فرصة ثانية مُفعّلة وجاهزة للاستخدام!' };
+  }
+  if (item.category !== 'powerup' && progress.purchasedItems?.[item.id]) {
+    return { ok: false, status: 400, error: 'هذا العنصر مملوك ومُفعّل لديك مسبقاً!' };
+  }
+
+  const currentBalance = mode === 'kid' ? progress.stars : progress.xp;
+  if (currentBalance < item.cost) {
+    return {
+      ok: false,
+      status: 400,
+      error: `رصيدك غير كافٍ! تحتاج إلى ${item.cost} ${mode === 'kid' ? 'نجمة' : 'XP'}.`
+    };
+  }
+
+  if (mode === 'kid') {
+    progress.stars -= item.cost;
+  } else {
+    progress.xp -= item.cost;
+  }
+
+  if (!progress.purchasedItems) {
+    progress.purchasedItems = {};
+  }
+  progress.purchasedItems[item.id] = true;
+
+  if (item.unlockCharacterKey) {
+    if (!progress.unlockedCharacters) {
+      progress.unlockedCharacters = {};
+    }
+    progress.unlockedCharacters[item.unlockCharacterKey] = true;
+  }
+
+  if (item.id === 'streak_shield') {
+    progress.streakShieldActive = true;
+  } else if (item.id === 'second_chance_heart') {
+    progress.secondChanceHearts = (progress.secondChanceHearts || 0) + 1;
+  }
+
+  persistUsersToDisk();
+  return { ok: true, user: sanitizeCloudUser(user) };
 }
 
 // Knowledge Stories Store (Adults Mode Only)
@@ -575,7 +722,19 @@ function persistStoriesToDisk(): void {
 loadStoriesFromDisk();
 
 export function listKnowledgeStories(): KnowledgeStory[] {
-  return storiesStore.slice().sort((a, b) => b.createdAt - a.createdAt);
+  return storiesStore
+    .slice()
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((story) => {
+      const author = usersById.get(story.authorId);
+      const hasVip = Boolean(
+        author?.profiles?.adult?.progress?.purchasedItems?.golden_vip_frame || story.authorGoldenVip
+      );
+      return {
+        ...story,
+        authorGoldenVip: hasVip
+      };
+    });
 }
 
 export function createKnowledgeStory(
@@ -602,6 +761,7 @@ export function createKnowledgeStory(
     authorId: user.id,
     authorUsername: user.username,
     authorRole: role,
+    authorGoldenVip: Boolean(user.profiles.adult.progress.purchasedItems?.golden_vip_frame),
     kind: input.kind,
     ...(input.kind === 'word'
       ? {

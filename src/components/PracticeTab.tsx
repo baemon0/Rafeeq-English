@@ -17,13 +17,16 @@ import {
   Clock,
   RefreshCw,
   Star,
-  TrendingUp
+  TrendingUp,
+  Heart
 } from 'lucide-react';
 
 interface PracticeTabProps {
   mode: AppMode;
   onActivity: (type: 'challenge', points: number) => void;
   cloudProfile?: ModeCloudProfile;
+  secondChanceHearts?: number;
+  onUseSecondChanceHeart?: () => void;
   onSyncPractice?: (patch: {
     weeklyTracker?: WeeklyTracker;
     dailyQuiz?: DailyQuizState | null;
@@ -61,7 +64,7 @@ function loadOrInitWeeklyTracker(mode: AppMode): WeeklyTracker {
       }
     }
   } catch {
-    // Fallback to clean initialization
+    // Fallback
   }
   const initial: WeeklyTracker = {
     firstUsedDate: Date.now(),
@@ -84,16 +87,22 @@ function saveWeeklyTracker(mode: AppMode, tracker: WeeklyTracker): void {
 }
 
 function calculateWeekNumber(tracker: WeeklyTracker): number {
-  const daysElapsed = Math.max(0, Math.floor((Date.now() - tracker.firstUsedDate) / TWENTY_FOUR_HOURS_MS));
+  const daysElapsed = Math.max(
+    0,
+    Math.floor((Date.now() - tracker.firstUsedDate) / TWENTY_FOUR_HOURS_MS)
+  );
   const weekByTime = Math.floor(daysElapsed / 7) + 1;
   const weekByMilestones = Math.floor(tracker.completedDailySets / 7) + 1;
   return Math.max(1, weekByTime, weekByMilestones);
 }
 
-function getWeekBadgeInfo(weekNumber: number, isKid: boolean): { badgeLabel: string; focusLabel: string } {
+function getWeekBadgeInfo(
+  weekNumber: number,
+  isKid: boolean
+): { badgeLabel: string; focusLabel: string } {
   if (weekNumber === 1) {
     return {
-      badgeLabel: 'الأسبوع 1 - مبتدئ',
+      badgeLabel: 'الأسبوع 1 · مبتدئ',
       focusLabel: isKid
         ? 'كلمات أساسية، ألوان، وأشياء يومية بسيطة'
         : 'عبارات المحادثة اليومية والتعبيرات الشائعة'
@@ -101,14 +110,14 @@ function getWeekBadgeInfo(weekNumber: number, isKid: boolean): { badgeLabel: str
   }
   if (weekNumber === 2) {
     return {
-      badgeLabel: isKid ? 'الأسبوع 2 - متطور' : 'الأسبوع 2 - متوسط',
+      badgeLabel: isKid ? 'الأسبوع 2 · متطور' : 'الأسبوع 2 · متوسط',
       focusLabel: isKid
         ? 'عبارات قصيرة من 3 كلمات وأفعال يومية'
         : 'مواقف العمل والسفر والعامية الذكية'
     };
   }
   return {
-    badgeLabel: isKid ? `الأسبوع ${weekNumber} - مستكشف متقدم` : `الأسبوع ${weekNumber} - متقدم`,
+    badgeLabel: isKid ? `الأسبوع ${weekNumber} · مستكشف متقدم` : `الأسبوع ${weekNumber} · متقدم`,
     focusLabel: isKid
       ? 'جمل يومية بسيطة وتحديات إملاء ذكية'
       : 'تعبيرات أصيلة متقدمة وفروق لغوية دقيقة'
@@ -126,17 +135,6 @@ function loadAskedHistory(mode: AppMode): string[] {
   }
 }
 
-function saveAskedHistory(mode: AppMode, newQuestions: PracticeQuestion[]): void {
-  try {
-    const existing = loadAskedHistory(mode);
-    const additions = newQuestions.map((q) => q.questionAr.trim()).filter(Boolean);
-    const merged = Array.from(new Set([...existing, ...additions])).slice(-200);
-    localStorage.setItem(getHistoryStorageKey(mode), JSON.stringify(merged));
-  } catch (err) {
-    console.warn('Could not save asked history:', err);
-  }
-}
-
 function formatRemainingTime(createdAt: number): string {
   const remaining = Math.max(0, createdAt + TWENTY_FOUR_HOURS_MS - Date.now());
   const hours = Math.floor(remaining / (1000 * 60 * 60));
@@ -148,6 +146,8 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
   mode,
   onActivity,
   cloudProfile,
+  secondChanceHearts = 0,
+  onUseSecondChanceHeart,
   onSyncPractice
 }) => {
   const isKid = mode === 'kid';
@@ -242,7 +242,7 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
       try {
         localStorage.setItem(getDailyStorageKey(mode), JSON.stringify(cloudProfile.dailyQuiz));
       } catch {
-        // Ignore storage quota errors
+        // Ignore
       }
       setLoading(false);
       return;
@@ -266,7 +266,7 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
         }
       }
     } catch {
-      // Ignore corrupt localStorage and regenerate
+      // Ignore
     }
 
     fetchFreshDailyQuiz(mode, currentWeek);
@@ -339,69 +339,78 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
   const milestoneProgress = weeklyTracker.completedDailySets % 7;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 pb-28">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-md border border-gray-100 dark:border-gray-700 mb-6 text-center">
-        <div
-          className={`inline-flex p-3 rounded-2xl mb-3 shadow-inner ${
-            isKid
-              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-500'
-              : 'bg-emerald-50 dark:bg-emerald-950/40 text-[#2D6A4F]'
-          }`}
-        >
-          <Trophy className="w-8 h-8 animate-bounce" />
-        </div>
-        <h2 className="text-2xl font-black text-gray-800 dark:text-white">
-          {isKid ? 'ألعاب وتحديات النجوم اليومية 🏆' : 'التحدي اليومي للكبار (5 أسئلة)'}
-        </h2>
-        <p className="text-sm text-gray-500 mt-1">
-          {isKid
-            ? '5 أسئلة ممتعة وجديدة كل يوم! أجب واجمع النجوم يا بطل.'
-            : '5 أسئلة ذكية ومتجددة يومياً في التعبيرات الشائعة، بيئة العمل، والسفر.'}
-        </p>
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 pb-32 space-y-8">
+      {/* Header Card */}
+      <div className="editorial-card rounded-3xl p-6 sm:p-8 text-center relative overflow-hidden">
+        {isKid && (
+          <svg
+            className="pointer-events-none absolute bottom-0 left-0 right-0 w-full h-10 text-[#2EC4B6]/10"
+            viewBox="0 0 1200 120"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              fill="currentColor"
+              d="M0,48 C220,110 460,5 740,64 C960,110 1100,32 1200,56 L1200,120 L0,120 Z"
+            />
+          </svg>
+        )}
 
-        {/* Weekly Progressive Difficulty Badge */}
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-col items-center gap-1.5">
+        <div className="relative z-10">
           <div
-            className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-extrabold border ${
+            className={`w-14 h-14 mx-auto rounded-full flex items-center justify-center mb-4 ${
               isKid
-                ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                : 'bg-emerald-50 text-[#2D6A4F] border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                ? 'bg-[#FF9F1C]/15 text-[#D97706]'
+                : 'bg-[#1B4332]/10 dark:bg-[#D4A373]/15 text-[#1B4332] dark:text-[#D4A373]'
             }`}
           >
-            <TrendingUp className="w-4 h-4" />
-            <span>{badgeLabel}</span>
+            <Trophy className="w-7 h-7" />
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-            {focusLabel} • تقدم الأسبوع: {milestoneProgress}/7 تحديات
+          <h2 className="text-xl sm:text-2xl font-bold text-[#1B4332] dark:text-[#FAF8F5]">
+            {isKid ? 'تحديات النجوم اليومية' : 'التحدي اليومي (5 أسئلة)'}
+          </h2>
+          <p className="text-sm text-[#5C665E] dark:text-gray-400 mt-1.5 max-w-lg mx-auto">
+            {isKid
+              ? 'خمسة أسئلة ممتعة ومتجددة كل يوم لجمع النجوم وتثبيت الكلمات.'
+              : 'خمسة أسئلة ذكية ومتجددة يومياً في التعبيرات الشائعة، بيئة العمل، والسفر.'}
           </p>
+
+          <div className="mt-5 pt-4 border-t border-[#1B4332]/[0.08] dark:border-white/10 flex items-center justify-center gap-2 flex-wrap text-xs text-[#5C665E] dark:text-gray-300">
+            <TrendingUp className={`w-4 h-4 ${isKid ? 'text-[#2EC4B6]' : 'text-[#1B4332] dark:text-[#D4A373]'}`} />
+            <span className="font-bold text-[#1B4332] dark:text-white">{badgeLabel}</span>
+            <span aria-hidden="true">·</span>
+            <span>{focusLabel}</span>
+            <span aria-hidden="true">·</span>
+            <span className="tabular-nums">تقدم الأسبوع {milestoneProgress}/7</span>
+          </div>
         </div>
       </div>
 
       {/* Loading State */}
       {loading && (
-        <div className="bg-white dark:bg-gray-800 rounded-3xl p-10 text-center shadow-xl border border-gray-100 dark:border-gray-700 animate-pulse">
+        <div className="editorial-card rounded-3xl p-10 text-center">
           <RefreshCw
-            className={`w-10 h-10 animate-spin mx-auto mb-3 ${
-              isKid ? 'text-rose-500' : 'text-[#2D6A4F]'
+            className={`w-8 h-8 animate-spin mx-auto mb-3 ${
+              isKid ? 'text-[#2EC4B6]' : 'text-[#1B4332] dark:text-[#D4A373]'
             }`}
           />
-          <h3 className="text-lg font-bold text-gray-800 dark:text-white">
-            {isKid ? 'جاري تحضير 5 أسئلة سحرية جديدة لك...' : 'جاري إعداد 5 أسئلة يومية مخصصة لك...'}
+          <h3 className="text-base font-bold text-[#1B4332] dark:text-white">
+            {isKid ? 'جاري تحضير 5 أسئلة جديدة لك...' : 'جاري إعداد 5 أسئلة يومية مخصصة لك...'}
           </h3>
-          <p className="text-xs text-gray-400 mt-1">أسئلة متجددة لا تتكرر بالذكاء الاصطناعي</p>
+          <p className="text-xs text-[#6B756D] mt-1">أسئلة متجددة لا تتكرر</p>
         </div>
       )}
 
       {/* Error State */}
       {!loading && errorMsg && (
-        <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 text-center shadow-xl border border-rose-200">
+        <div className="editorial-card rounded-3xl p-8 text-center border-rose-500/30">
           <XCircle className="w-10 h-10 text-rose-500 mx-auto mb-3" />
-          <p className="text-sm font-bold text-gray-800 dark:text-white mb-4">{errorMsg}</p>
+          <p className="text-sm font-bold text-[#1B4332] dark:text-white mb-4">{errorMsg}</p>
           <button
+            type="button"
             onClick={() => fetchFreshDailyQuiz(mode, weekNumber)}
-            className={`px-6 py-2.5 rounded-2xl text-white font-bold text-sm shadow ${
-              isKid ? 'bg-rose-500 hover:bg-rose-600' : 'bg-[#2D6A4F] hover:bg-[#1b4332]'
+            className={`px-6 py-2.5 rounded-2xl text-white font-semibold text-sm ${
+              isKid ? 'bg-[#2EC4B6] hover:bg-[#24A99D]' : 'bg-[#1B4332] hover:bg-[#143326]'
             }`}
           >
             إعادة المحاولة
@@ -411,69 +420,62 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
 
       {/* Active Quiz Card */}
       {!loading && !errorMsg && quizState && !quizState.completed && currentQ && (
-        <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-xl border border-gray-100 dark:border-gray-700">
-          {/* Progress Header (1/5 to 5/5) */}
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2">
-              <span
-                className={`text-xs font-extrabold px-3 py-1 rounded-full ${
-                  isKid ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-[#2D6A4F]'
-                }`}
-              >
-                {quizState.currentIndex + 1} / {totalQuestions}
+        <div className="editorial-card rounded-3xl p-6 sm:p-8 space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs text-[#5C665E] dark:text-gray-300">
+              <span className="font-bold text-[#1B4332] dark:text-white tabular-nums">
+                السؤال {quizState.currentIndex + 1} من {totalQuestions}
               </span>
               {currentQ.category && (
-                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">
-                  • {currentQ.category}
-                </span>
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{currentQ.category}</span>
+                </>
               )}
             </div>
-            <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-800">
-              النقاط: {quizState.score} XP
+            <span className="text-xs font-bold text-[#9C6644] dark:text-[#D4A373] tabular-nums">
+              {quizState.score} نقطة
             </span>
           </div>
 
-          {/* Visual 5-step progress bar */}
-          <div className="grid grid-cols-5 gap-1.5 mb-6">
+          <div className="grid grid-cols-5 gap-2">
             {quizState.questions.map((_, idx) => (
               <div
                 key={idx}
-                className={`h-2 rounded-full transition-all ${
+                className={`h-1.5 rounded-full transition-all ${
                   idx < quizState.currentIndex
                     ? isKid
-                      ? 'bg-rose-500'
-                      : 'bg-[#2D6A4F]'
+                      ? 'bg-[#2EC4B6]'
+                      : 'bg-[#1B4332] dark:bg-[#D4A373]'
                     : idx === quizState.currentIndex
                       ? isKid
-                        ? 'bg-amber-400'
-                        : 'bg-emerald-400'
-                      : 'bg-gray-200 dark:bg-gray-700'
+                        ? 'bg-[#FF9F1C]'
+                        : 'bg-[#D4A373]'
+                      : 'bg-black/[0.07] dark:bg-white/10'
                 }`}
               />
             ))}
           </div>
 
-          {/* Question Prompt */}
           <h3
-            className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white mb-4 leading-relaxed"
+            className="text-lg sm:text-xl font-bold text-[#1B4332] dark:text-white leading-relaxed"
             dir="rtl"
           >
             {currentQ.questionAr}
           </h3>
 
-          {/* Optional English Context / Fill-in-the-blank Card */}
           {currentQ.englishContext && currentQ.englishContext.trim() !== '' && (
             <div
-              className="mb-5 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3"
+              className="p-4 rounded-2xl bg-black/[0.025] dark:bg-white/5 border border-[#E5DEC9] dark:border-white/10 flex items-center justify-between gap-3"
               dir="ltr"
             >
-              <p className="text-base font-bold text-gray-800 dark:text-gray-100">
+              <p className="text-base font-semibold text-[#1B4332] dark:text-gray-100">
                 {currentQ.englishContext}
               </p>
               <button
                 type="button"
                 onClick={() => speakText(currentQ.englishContext!.replace(/___+/g, 'blank'))}
-                className="p-2 rounded-xl bg-white dark:bg-gray-800 text-[#2D6A4F] shadow-sm hover:bg-emerald-50 shrink-0"
+                className="w-9 h-9 rounded-full bg-white dark:bg-white/10 text-[#1B4332] dark:text-[#D4A373] flex items-center justify-center shrink-0"
                 title="استمع للجملة"
               >
                 <Volume2 className="w-4 h-4" />
@@ -481,18 +483,17 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
             </div>
           )}
 
-          {/* Options */}
           <div className="space-y-3">
             {currentQ.options.map((opt, idx) => {
               let rowStyle =
-                'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 hover:bg-emerald-50 dark:hover:bg-gray-800';
+                'bg-black/[0.02] dark:bg-white/[0.03] border-[#E5DEC9] dark:border-white/10 text-[#1B4332] dark:text-gray-100 hover:border-[#1B4332]/40';
               if (quizState.isAnswered) {
                 if (idx === currentQ.correctIndex) {
-                  rowStyle = 'bg-emerald-500 text-white border-emerald-600 shadow-md';
+                  rowStyle = 'bg-[#1B4332] text-white border-[#1B4332]';
                 } else if (idx === quizState.selectedOption) {
-                  rowStyle = 'bg-rose-500 text-white border-rose-600 shadow-md';
+                  rowStyle = 'bg-rose-600 text-white border-rose-600';
                 } else {
-                  rowStyle = 'opacity-50 bg-gray-100 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
+                  rowStyle = 'opacity-50 bg-black/[0.02] dark:bg-white/[0.02] border-[#E5DEC9]';
                 }
               }
 
@@ -506,14 +507,14 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
                     type="button"
                     onClick={() => handleSelect(idx)}
                     disabled={quizState.isAnswered}
-                    className="flex-1 p-4 text-left font-bold text-sm sm:text-base focus:outline-none"
+                    className="flex-1 p-4 text-left font-semibold text-sm sm:text-base focus:outline-none"
                   >
                     {opt}
                   </button>
                   <button
                     type="button"
                     onClick={() => speakText(opt)}
-                    className="p-2.5 mr-2 rounded-xl bg-white/25 hover:bg-white/40 text-current shrink-0"
+                    className="p-2.5 mr-2 rounded-xl hover:bg-black/10 text-current shrink-0"
                     title="استمع للنطق"
                   >
                     <Volume2 className="w-4 h-4" />
@@ -523,67 +524,98 @@ export const PracticeTab: React.FC<PracticeTabProps> = ({
             })}
           </div>
 
-          {/* Explanation & Next */}
           {quizState.isAnswered && (
-            <div className="mt-6 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900">
+            <div className="p-5 rounded-2xl bg-[#1B4332]/[0.05] dark:bg-white/5 border border-[#1B4332]/15 dark:border-white/10">
               <div className="flex items-center gap-2 mb-2">
                 {quizState.selectedOption === currentQ.correctIndex ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <CheckCircle2 className="w-5 h-5 text-[#1B4332] dark:text-emerald-400" />
                 ) : (
                   <XCircle className="w-5 h-5 text-rose-600" />
                 )}
-                <span className="font-bold text-sm text-gray-800 dark:text-white">
+                <span className="font-bold text-sm text-[#1B4332] dark:text-white">
                   {quizState.selectedOption === currentQ.correctIndex
-                    ? 'إجابة صحيحة! أحسنت 🌟'
-                    : 'إجابة غير صحيحة، تعلّم من الشرح!'}
+                    ? 'إجابة صحيحة! أحسنت'
+                    : 'إجابة غير صحيحة، إليك التوضيح:'}
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 leading-relaxed" dir="rtl">
+              <p
+                className="text-xs sm:text-sm text-[#4F5B53] dark:text-gray-300 leading-relaxed"
+                dir="rtl"
+              >
                 {currentQ.explanation}
               </p>
 
-              <button
-                type="button"
-                onClick={nextQuestion}
-                className={`mt-4 px-6 py-2.5 rounded-xl text-white font-bold text-xs shadow flex items-center gap-2 mr-auto ${
-                  isKid ? 'bg-rose-500 hover:bg-rose-600' : 'bg-[#2D6A4F] hover:bg-[#1b4332]'
-                }`}
-              >
-                <span>
-                  {quizState.currentIndex < totalQuestions - 1 ? 'السؤال التالي' : 'إنهاء تحدي اليوم'}
-                </span>
-                <ArrowLeft className="w-4 h-4" />
-              </button>
+              <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
+                {isKid &&
+                  quizState.selectedOption !== currentQ.correctIndex &&
+                  secondChanceHearts > 0 &&
+                  onUseSecondChanceHeart && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onUseSecondChanceHeart();
+                        persistQuizState({
+                          ...quizState,
+                          selectedOption: null,
+                          isAnswered: false
+                        });
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-[#FF9F1C] hover:bg-[#E88D14] text-white font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-95"
+                    >
+                      <Heart className="w-4 h-4 fill-white" />
+                      <span>استخدام فرصة ثانية</span>
+                    </button>
+                  )}
+
+                <button
+                  type="button"
+                  onClick={nextQuestion}
+                  className={`px-6 py-2.5 rounded-xl text-white font-semibold text-xs flex items-center gap-2 mr-auto ${
+                    isKid ? 'bg-[#2EC4B6] hover:bg-[#24A99D]' : 'bg-[#1B4332] hover:bg-[#143326]'
+                  }`}
+                >
+                  <span>
+                    {quizState.currentIndex < totalQuestions - 1 ? 'السؤال التالي' : 'إنهاء تحدي اليوم'}
+                  </span>
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Daily Completion Card */}
+      {/* Completion Card */}
       {!loading && !errorMsg && quizState && quizState.completed && (
-        <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 text-center shadow-xl border border-amber-200 dark:border-amber-900">
-          <Sparkles className="w-12 h-12 text-amber-500 mx-auto mb-4 animate-bounce" />
-          <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-2">
-            {isKid ? 'بطل اليوم! أنهيت 5 من 5 أسئلة 🎉' : 'رائع! أتممت تحدي اليوم بنجاح (5/5) 🎉'}
+        <div className="editorial-card rounded-3xl p-8 text-center space-y-4">
+          <div
+            className={`w-14 h-14 mx-auto rounded-full flex items-center justify-center ${
+              isKid ? 'bg-[#FF9F1C]/15 text-[#D97706]' : 'bg-[#D4A373]/20 text-[#9C6644]'
+            }`}
+          >
+            <Sparkles className="w-7 h-7" />
+          </div>
+          <h3 className="text-2xl font-bold text-[#1B4332] dark:text-white">
+            {isKid ? 'أحسنت! أنهيت 5 من 5 أسئلة' : 'رائع! أتممت تحدي اليوم بنجاح (5/5)'}
           </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+          <p className="text-sm text-[#5C665E] dark:text-gray-300">
             أجبت بشكل صحيح على{' '}
-            <strong className={isKid ? 'text-rose-600' : 'text-[#2D6A4F]'}>
+            <strong className="text-[#1B4332] dark:text-white tabular-nums">
               {quizState.correctCount} من {totalQuestions}
             </strong>{' '}
-            وحصدت <strong className="text-amber-600">{quizState.score} XP</strong>!
+            وحصدت <strong className="text-[#9C6644] dark:text-[#D4A373] tabular-nums">{quizState.score}</strong> نقطة.
           </p>
 
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-bold mb-4">
-            <Clock className="w-4 h-4" />
-            <span>تحدي الغد الجديد (5 أسئلة غير مكررة) يتجدد بعد: {formatRemainingTime(quizState.createdAt)}</span>
+          <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#D4A373]/12 border border-[#D4A373]/30 text-[#7C4D2B] dark:text-[#E9C46A] text-xs font-semibold">
+            <Clock className="w-4 h-4 shrink-0" />
+            <span>يتجدد تحدي الغد بعد: {formatRemainingTime(quizState.createdAt)}</span>
           </div>
 
-          <div className="mt-2 flex items-center justify-center gap-1.5 text-xs text-gray-400">
-            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+          <div className="pt-2 flex items-center justify-center gap-1.5 text-xs text-[#6B756D]">
+            <Star className="w-3.5 h-3.5 text-[#FF9F1C] fill-[#FF9F1C]" />
             <span>
               {isKid
-                ? 'يمكنك تجربة تحدي الكبار أو محادثة نجم حتى موعد أسئلة الغد!'
+                ? 'يمكنك التحدث مع نجم أو تجربة العدسة الذكية حتى موعد الغد.'
                 : 'يتم تتبع تحدي الكبار والصغار بشكل مستقل كل 24 ساعة.'}
             </span>
           </div>

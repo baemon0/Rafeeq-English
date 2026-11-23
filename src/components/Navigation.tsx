@@ -1,6 +1,14 @@
 import React from 'react';
 import { TabType, AppMode } from '../types';
-import { Languages, Camera, MessageSquareText, Trophy, Award, BookOpen, Palmtree } from 'lucide-react';
+import {
+  Languages,
+  Camera,
+  MessageSquareText,
+  Trophy,
+  Award,
+  BookOpen,
+  ShoppingBag
+} from 'lucide-react';
 
 interface NavigationProps {
   activeTab: TabType;
@@ -14,66 +22,74 @@ export const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab,
   const tabs: Array<{ id: TabType; label: string; icon: React.ReactNode }> = [
     {
       id: 'translator',
-      label: isKid ? 'المترجم السحري' : 'المترجم',
-      icon: <Languages className="w-5 h-5" />
+      label: 'المترجم',
+      icon: <Languages className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
     },
     {
       id: 'lens',
-      label: isKid ? 'العدسة السحرية' : 'العدسة',
-      icon: <Camera className="w-5 h-5" />
+      label: 'العدسة',
+      icon: <Camera className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
     },
     {
       id: 'chat',
-      label: isKid ? 'محادثة نجم' : 'المحادثة',
-      icon: <MessageSquareText className="w-5 h-5" />
+      label: 'المحادثة',
+      icon: <MessageSquareText className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
     },
     {
       id: 'practice',
-      label: isKid ? 'ألعاب وتحديات' : 'التمارين',
-      icon: <Trophy className="w-5 h-5" />
-    },
-    {
-      id: 'island',
-      label: isKid ? 'جزيرتي 🏝️' : 'الجزيرة',
-      icon: <Palmtree className="w-5 h-5" />
+      label: isKid ? 'التحديات' : 'التمارين',
+      icon: <Trophy className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
     },
     ...(!isKid
       ? [
           {
             id: 'stories' as TabType,
             label: 'الستوري',
-            icon: <BookOpen className="w-5 h-5" />
+            icon: <BookOpen className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
           }
         ]
       : []),
     {
+      id: 'shop',
+      label: 'المتجر',
+      icon: <ShoppingBag className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+    },
+    {
       id: 'progress',
       label: isKid ? 'نجومي' : 'الإنجازات',
-      icon: <Award className="w-5 h-5" />
+      icon: <Award className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
     }
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-200 shadow-lg">
-      <div className="max-w-3xl mx-auto px-2 py-2 flex items-center justify-around">
+    <nav
+      className="fixed bottom-4 inset-x-0 z-30 flex justify-center px-3 pointer-events-none"
+      aria-label="التنقل الرئيسي"
+    >
+      <div
+        className={`pointer-events-auto max-w-full overflow-x-auto no-scrollbar rounded-full p-1.5 flex items-center gap-1 backdrop-blur-2xl border transition-all ${
+          isKid
+            ? 'bg-[#FFFDF7]/92 dark:bg-[#1E1A16]/92 border-[#EFE5D1] dark:border-white/15 shadow-[0_14px_36px_-10px_rgba(46,196,182,0.28)]'
+            : 'bg-[#FAF8F5]/92 dark:bg-[#161E1A]/92 border-[#E5DEC9] dark:border-white/15 shadow-[0_16px_40px_-12px_rgba(27,67,50,0.22)]'
+        }`}
+      >
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition-all ${
+              className={`min-h-[40px] px-3 sm:px-4 py-1.5 rounded-full flex items-center gap-1.5 transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0 ${
                 isActive
-                  ? isKid 
-                    ? 'text-rose-600 bg-rose-50 scale-105 font-bold shadow-sm' 
-                    : 'text-[#2D6A4F] bg-emerald-50 scale-105 font-bold shadow-sm'
-                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                  ? isKid
+                    ? 'bg-[#2EC4B6] text-white font-semibold shadow-sm'
+                    : 'bg-[#1B4332] text-[#FAF8F5] font-semibold shadow-sm'
+                  : 'text-[#5C665E] dark:text-gray-400 hover:text-[#1B4332] dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.06] font-medium'
               }`}
             >
-              <div className={`transition-transform duration-200 ${isActive ? 'scale-110' : ''}`}>
-                {tab.icon}
-              </div>
-              <span className="text-[11px] mt-1 font-medium tracking-tight whitespace-nowrap">
+              <span className="shrink-0">{tab.icon}</span>
+              <span className={`text-xs ${isActive ? 'inline' : 'hidden sm:inline'}`}>
                 {tab.label}
               </span>
             </button>

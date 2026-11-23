@@ -1,6 +1,6 @@
 export type AppMode = 'adult' | 'kid';
 
-export type TabType = 'translator' | 'lens' | 'chat' | 'practice' | 'stories' | 'progress';
+export type TabType = 'translator' | 'lens' | 'chat' | 'practice' | 'stories' | 'shop' | 'progress';
 
 export type TranslationStyle = 'slang' | 'formal';
 
@@ -16,6 +16,7 @@ export interface KnowledgeStory {
     dotClass: string;
     pillClass: string;
   };
+  authorGoldenVip?: boolean;
   kind: StoryKind;
   englishTerm?: string;
   arabicMeaning?: string;
@@ -35,19 +36,30 @@ export type BadgeId =
   | 'astronaut_friend'
   | 'golden_castle';
 
+export interface VocabularyWord {
+  id: string;
+  word: string;
+  meaning: string;
+  masteryLevel: number; // 0 to 3
+  nextReviewDate: number;
+  lastReviewed: number;
+}
+
 export interface UserProgress {
   stars: number;
   xp: number;
-  chatXp: number;
-  langCoins: number;
   streak: number;
   lastActiveDate: string | null;
   translationsCount: number;
   challengeQuestionsCount: number;
   lensScansCount: number;
   chatMessagesCount: number;
-  scannedObjects: string[];
   unlockedBadges: Partial<Record<BadgeId, boolean>>;
+  vocabulary: VocabularyWord[];
+  unlockedCharacters: Record<string, boolean>;
+  purchasedItems: Record<string, boolean>;
+  streakShieldActive: boolean;
+  secondChanceHearts: number;
 }
 
 export interface TranslationResult {
@@ -133,11 +145,9 @@ export interface CloudUser {
 
 export interface LeaderboardEntry {
   rank: number;
-  userId?: string;
   username: string;
   stars: number;
   xp: number;
-  langCoins: number;
   streak: number;
   level: number;
   role: {
@@ -147,4 +157,6 @@ export interface LeaderboardEntry {
     pillClass: string;
   };
   isCurrentUser: boolean;
+  galaxyChampion?: boolean;
+  goldenVipFrame?: boolean;
 }

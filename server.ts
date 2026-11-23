@@ -10,10 +10,12 @@ import {
   createKnowledgeStory,
   getUserByToken,
   listKnowledgeStories,
+  purchaseShopItem,
   registerUser,
   revokeSession,
   sanitizeCloudUser,
-  updateUserModeProfile
+  updateUserModeProfile,
+  persistUsersToDisk
 } from './server/cloudStore';
 
 dotenv.config();
@@ -161,102 +163,50 @@ app.get('/api/leaderboard', (req, res) => {
   return res.json({ mode: modeParam, entries });
 });
 
-app.post('/api/avatar/shop', (req, res) => {
+app.post('/api/vocabulary/review', (req, res) => {
   const user = getUserByToken(extractBearerToken(req));
-  if (!user) {
-    return res.status(401).json({ error: 'انتهت الجلسة، يرجى تسجيل الدخول.' });
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const { mode, wordId, correct } = req.body;
+  const profile = user.profiles[mode === 'kid' ? 'kid' : 'adult'];
+  const vocabItem = profile.progress.vocabulary.find((v: any) => v.id === wordId);
+  if (vocabItem) {
+    if (correct) {
+      vocabItem.masteryLevel = Math.min(3, vocabItem.masteryLevel + 1);
+      const intervals = [86400000, 2 * 86400000, 4 * 86400000];
+      const interval = intervals[vocabItem.masteryLevel - 1] || 86400000;
+      vocabItem.nextReviewDate = Date.now() + interval;
+      profile.progress.xp += 5;
+      profile.progress.stars += 5;
+    } else {
+      vocabItem.masteryLevel = Math.max(0, vocabItem.masteryLevel - 1);
+      vocabItem.nextReviewDate = Date.now();
+    }
+    vocabItem.lastReviewed = Date.now();
+    persistUsersToDisk();
   }
-  const { mode, ...payload } = req.body || {};
-  if (mode !== 'kid' && mode !== 'adult') {
-    return res.status(400).json({ error: 'Invalid profile mode' });
-  }
-  const result = handleAvatarShopAction(user, mode, payload);
-  if (!result.ok) {
-    return res.status(result.status).json({ error: result.error });
-  }
-  return res.json(result);
+  return res.json({ ok: true, user: sanitizeCloudUser(user) });
 });
 
-app.post('/api/craft', (req, res) => {
+app.post('/api/shop/buy', (req, res) => {
   const user = getUserByToken(extractBearerToken(req));
-  if (!user) {
-    return res.status(401).json({ error: 'انتهت الجلسة، يرجى تسجيل الدخول.' });
-  }
-  const { mode, slot1, slot2 } = req.body || {};
-  if (mode !== 'kid' && mode !== 'adult') {
-    return res.status(400).json({ error: 'Invalid profile mode' });
-  }
-  const result = handleCraftAvatarItem(user, mode, slot1, slot2);
-  if (!result.ok) {
-    return res.status(result.status).json({ error: result.error });
-  }
-  return res.json(result);
-});
-
-app.post('/api/enchant', (req, res) => {
-  const user = getUserByToken(extractBearerToken(req));
-  if (!user) {
-    return res.status(401).json({ error: 'انتهت الجلسة، يرجى تسجيل الدخول.' });
-  }
+  if (!user) return res.status(401).json({ error: 'يرجى تسجيل الدخول لإتمام الشراء.' });
   const { mode, itemId } = req.body || {};
-  if (mode !== 'kid' && mode !== 'adult') {
-    return res.status(400).json({ error: 'Invalid profile mode' });
-  }
-  const result = handleEnchantAvatarItem(user, mode, itemId);
+  const targetMode = mode === 'kid' ? 'kid' : 'adult';
+  const result = purchaseShopItem(user, targetMode, String(itemId || ''));
   if (!result.ok) {
     return res.status(result.status).json({ error: result.error });
   }
-  return res.json(result);
+  return res.json({ ok: true, user: result.user });
 });
 
-// 0.4 Pixel Island Builder & Friends Visit APIs
-app.get('/api/island', (req, res) => {
-  const modeParam = req.query.mode === 'kid' ? 'kid' : 'adult';
-  const targetUserId = typeof req.query.userId === 'string' ? req.query.userId : '';
-  const currentUser = getUserByToken(extractBearerToken(req));
-
-  const uid = targetUserId || currentUser?.id;
-  if (!uid) {
-    return res.status(400).json({ error: 'يرجى تحديد المستخدم المطلوب أو تسجيل الدخول.' });
-  }
-
-  const result = handleGetIsland(uid, modeParam, currentUser?.id);
-  if (!result.ok) {
-    return res.status(result.status).json({ error: result.error });
-  }
-  return res.json(result);
-});
-
-app.post('/api/island/place', (req, res) => {
+app.post('/api/streak/shield', (req, res) => {
   const user = getUserByToken(extractBearerToken(req));
-  if (!user) {
-    return res.status(401).json({ error: 'انتهت الجلسة، يرجى تسجيل الدخول.' });
-  }
-  const { mode, x, y, itemId } = req.body || {};
-  if (mode !== 'kid' && mode !== 'adult') {
-    return res.status(400).json({ error: 'Invalid profile mode' });
-  }
-  const result = handlePlaceIslandTile(user, mode, x, y, itemId);
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const result = purchaseShopItem(user, 'adult', 'streak_shield');
   if (!result.ok) {
     return res.status(result.status).json({ error: result.error });
   }
-  return res.json(result);
-});
-
-app.post('/api/island/like', (req, res) => {
-  const user = getUserByToken(extractBearerToken(req));
-  if (!user) {
-    return res.status(401).json({ error: 'انتهت الجلسة، يرجى تسجيل الدخول.' });
-  }
-  const { targetUserId, mode } = req.body || {};
-  if (mode !== 'kid' && mode !== 'adult') {
-    return res.status(400).json({ error: 'Invalid profile mode' });
-  }
-  const result = handleLikeIsland(user, targetUserId, mode);
-  if (!result.ok) {
-    return res.status(result.status).json({ error: result.error });
-  }
-  return res.json(result);
+  return res.json({ ok: true, user: result.user });
 });
 
 // 0.5 Knowledge Stories & XP Bet API (Adults Mode Only)
@@ -479,7 +429,32 @@ Respond ONLY with JSON:
 }`;
 
     const textResult = await callGeminiSafe(ai, prompt, true);
-    res.json(JSON.parse(textResult));
+    const parsedTranslation = JSON.parse(textResult);
+
+    const user = getUserByToken(extractBearerToken(req));
+    let syncedVocabulary: any[] | undefined;
+    if (user && parsedTranslation?.translation) {
+      const profile = user.profiles[mode === 'kid' ? 'kid' : 'adult'];
+      const word = parsedTranslation.translation;
+      const meaning = trimmed;
+      if (word && !profile.progress.vocabulary.some((v: any) => v.word.toLowerCase() === word.toLowerCase())) {
+        profile.progress.vocabulary.push({
+          id: `${Date.now()}-${Math.random()}`,
+          word,
+          meaning,
+          masteryLevel: 0,
+          nextReviewDate: Date.now(),
+          lastReviewed: Date.now()
+        });
+        persistUsersToDisk();
+      }
+      syncedVocabulary = profile.progress.vocabulary;
+    }
+
+    res.json({
+      ...parsedTranslation,
+      ...(syncedVocabulary ? { vocabulary: syncedVocabulary } : {})
+    });
   } catch (err: any) {
     console.error('Live translation error:', err);
     res.status(500).json({ 
@@ -510,13 +485,7 @@ app.post('/api/lens', async (req, res) => {
       return res.status(400).json({ error: 'Invalid image data format' });
     }
 
-    const prompt = `Identify the main object in this image precisely AND classify which crafting resource it yields from ONLY these 5 choices: "wool", "glass", "iron", "wood", "paper".
-- "wool": clothes, fabric, pillows, blankets, stuffed toys, carpets, sweaters
-- "glass": cups, glasses, windows, mirrors, bottles, screens, sunglasses
-- "iron": keys, laptops, phones, watches, spoons, tools, metal/electronic hardware
-- "wood": desks, tables, chairs, pencils, doors, plants/trees, wooden items
-- "paper": books, notebooks, papers, boxes, receipts, cards
-
+    const prompt = `Identify the main object in this image precisely.
 Respond ONLY with JSON:
 {
   "englishName": "object name",
@@ -524,8 +493,7 @@ Respond ONLY with JSON:
   "phonetic": "phonetic",
   "sentence": "practical English sentence",
   "stars": 5,
-  "funFact": "short fact",
-  "resourceType": "wool | glass | iron | wood | paper"
+  "funFact": "short fact"
 }`;
 
     const textResult = await callGeminiSafe(ai, [
@@ -534,25 +502,30 @@ Respond ONLY with JSON:
     ], true);
 
     const parsed = JSON.parse(textResult);
-    const validResTypes = ['wool', 'glass', 'iron', 'wood', 'paper'];
-    const inferResource = (name: string) => {
-      const n = (name || '').toLowerCase();
-      if (/(shirt|sweater|pillow|cloth|fabric|wool|bed|blanket|toy|plush|sock|rug|jacket)/.test(n)) return 'wool';
-      if (/(glass|cup|mug|window|mirror|bottle|eyeglass|shades|vase|screen)/.test(n)) return 'glass';
-      if (/(key|metal|iron|laptop|phone|watch|fork|spoon|car|coin|tech|mouse|keyboard)/.test(n)) return 'iron';
-      if (/(book|paper|notebook|card|page|box|letter|magazine)/.test(n)) return 'paper';
-      return 'wood';
-    };
-    const rType = validResTypes.includes(parsed?.resourceType)
-      ? parsed.resourceType
-      : inferResource(parsed?.englishName || '');
+
+    const user = getUserByToken(extractBearerToken(req));
+    let syncedVocabulary: any[] | undefined;
+    if (user && parsed?.englishName) {
+      const profile = user.profiles[mode === 'kid' ? 'kid' : 'adult'];
+      const word = parsed.englishName;
+      const meaning = parsed.arabicName || '';
+      if (word && !profile.progress.vocabulary.some((v: any) => v.word.toLowerCase() === word.toLowerCase())) {
+        profile.progress.vocabulary.push({
+          id: `${Date.now()}-${Math.random()}`,
+          word,
+          meaning,
+          masteryLevel: 0,
+          nextReviewDate: Date.now(),
+          lastReviewed: Date.now()
+        });
+        persistUsersToDisk();
+      }
+      syncedVocabulary = profile.progress.vocabulary;
+    }
 
     res.json({
       ...parsed,
-      resourceDrop: {
-        type: rType,
-        amount: 1
-      }
+      ...(syncedVocabulary ? { vocabulary: syncedVocabulary } : {})
     });
   } catch (err: any) {
     console.error('Smart lens live error:', err);
@@ -612,13 +585,11 @@ app.post('/api/lens/verify', async (req, res) => {
     }
 
     const prompt = `Check if this photo matches mission: "${mission.title}" (Goal: "${mission.targetCategory}").
-Also pick one crafting resource dropped by this object from ONLY: "wool", "glass", "iron", "wood", "paper".
 Respond ONLY with JSON:
 {
   "success": true,
   "feedback": "Great job! +20 stars!",
-  "stars": 20,
-  "resourceType": "wool | glass | iron | wood | paper"
+  "stars": 20
 }`;
 
     const textResult = await callGeminiSafe(ai, [
@@ -627,18 +598,7 @@ Respond ONLY with JSON:
     ], true);
 
     const parsed = JSON.parse(textResult);
-    const validResTypes = ['wool', 'glass', 'iron', 'wood', 'paper'];
-    const fallbackTypes = ['wool', 'glass', 'iron', 'wood', 'paper'] as const;
-    const rType = validResTypes.includes(parsed?.resourceType)
-      ? parsed.resourceType
-      : fallbackTypes[Math.floor(Math.random() * fallbackTypes.length)];
-
-    res.json({
-      ...parsed,
-      resourceDrop: parsed?.success
-        ? { type: rType, amount: 1 }
-        : undefined
-    });
+    res.json(parsed);
   } catch (err: any) {
     console.error('Verify error:', err);
     res.status(500).json({ error: err.message });
@@ -706,10 +666,18 @@ STRICT DEFAULT RULES (100% PURE ENGLISH ONLY):
 - React DIRECTLY, playfully, and naturally to what the child just said, never repeating a generic space intro.
 - Keep sentences short, warm, and encouraging (1-3 short sentences max).`;
       }
+    } else if (character === 'dino') {
+      systemInstruction = `You are Dino Rex (🦖), a playful, friendly space dinosaur who loves simple English word games and riddles with children. Keep replies short (1-2 sentences), fun, and warm in 100% PURE ENGLISH ONLY.`;
+    } else if (character === 'robo') {
+      systemInstruction = `You are Robo-Z (🤖), a funny futuristic high-tech robot who teaches cool English words to kids. Keep replies short, robotic-fun, and in 100% PURE ENGLISH ONLY.`;
     } else if (character === 'barista') {
       systemInstruction = `You are Oliver, a witty, friendly barista at a London café helping adults practice natural conversational English.${adultAbbrevGuide}
 ${openingGreeting ? `Your opening greeting was: "${openingGreeting}"` : ''}
 Feel free to casually understand or use natural texting/workplace expressions (like WFH, EOD, btw, lol) if relevant to what the user brings up. Keep replies natural (2-3 sentences).`;
+    } else if (character === 'career') {
+      systemInstruction = `You are a professional Career & Interview Coach (💼) helping adults practice job interviews, professional etiquette, and workplace acronyms (EOD, OOO, WFH, ETA, CC). Keep replies encouraging and professional in 100% PURE ENGLISH ONLY.${adultAbbrevGuide}`;
+    } else if (character === 'nyc') {
+      systemInstruction = `You are an energetic NYC Street Buddy (🇺🇸) helping adults master heavy American slang, idioms, and casual expressions. Keep replies casual, friendly, and in 100% PURE ENGLISH ONLY.${adultAbbrevGuide}`;
     } else {
       systemInstruction = `You are Sarah, an engaging London tour guide helping adults practice real-world travel and social English.${adultAbbrevGuide}
 ${openingGreeting ? `Your opening greeting was: "${openingGreeting}"` : ''}
